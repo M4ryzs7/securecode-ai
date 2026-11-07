@@ -258,6 +258,35 @@ def test_parse_ai_response_rejects_extra_fields():
     assert result is None
     assert error == "missing or unexpected JSON fields"
 
+
+def test_parse_ai_response_rejects_overclaim_in_triage_reason():
+    from analyzer import parse_ai_response
+
+    raw = json.dumps({
+        "triage": "uncertain",
+        "triage_reason": "This guarantees remote code execution.",
+        "explanation": GOOD_TEXT
+    })
+
+    result, error = parse_ai_response(raw, "B307")
+
+    assert result is None
+    assert error == "made an unsupported security claim"
+
+
+def test_parse_ai_response_rejects_fix_advice_in_triage_reason():
+    from analyzer import parse_ai_response
+
+    raw = json.dumps({
+        "triage": "uncertain",
+        "triage_reason": "You should use subprocess.run instead.",
+        "explanation": GOOD_TEXT
+    })
+
+    result, error = parse_ai_response(raw, "B602")
+
+    assert result is None
+    assert error == "contained forbidden fix advice"
     
 def test_prompt_requires_evidence_based_analysis():
     prompt = build_prompt(finding(code="subprocess.call(command, shell=True)"))

@@ -248,14 +248,16 @@ def parse_ai_response(raw_text: str, expected_test_id: str):
         if other_id != expected_test_id:
             return None, f"mentions a different finding ({other_id})"
 
+    combined_text = f"{triage_reason} {explanation}"
+
     # Reject unsupported security claims.
     for pattern in _OVERCLAIM_PATTERNS:
-        if re.search(pattern, explanation, flags=re.IGNORECASE):
+        if re.search(pattern, combined_text, flags=re.IGNORECASE):
             return None, "made an unsupported security claim"
 
     # Reject fix advice.
     for pattern in _FORBIDDEN_ADVICE_PATTERNS:
-        if re.search(pattern, explanation, flags=re.IGNORECASE):
+        if re.search(pattern, combined_text, flags=re.IGNORECASE):
             return None, "contained forbidden fix advice"
 
     return {
