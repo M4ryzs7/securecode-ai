@@ -30,7 +30,7 @@ GENERATION_OPTIONS = {
 }
 
 
-def query_ollama(prompt: str, model: str = None) -> dict:
+def query_ollama(prompt: str, model: str = None, response_schema: dict = None) -> dict:
     """
     Send one prompt to Ollama.
 
@@ -43,7 +43,7 @@ def query_ollama(prompt: str, model: str = None) -> dict:
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
+        "format": response_schema if response_schema else "json",
         "options": GENERATION_OPTIONS,
         "keep_alive": "10m",   # keep the model loaded between findings
     }
