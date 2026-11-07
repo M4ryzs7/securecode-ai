@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 import scanner
-from scanner import scan_file
+from scanner import scan_file, validate_fix_code
 
 VULNERABLE = (
     "import subprocess\n"                      # 1
@@ -124,3 +124,50 @@ def test_bandit_timeout(tmp_path, monkeypatch):
 def test_scan_upload_rejects_unknown_type(tmp_path):
     result = scanner.scan_upload(write(tmp_path, "a.txt", "x"), "a.txt")
     assert result["status"] == "error"
+
+def test_valid_fix_passes_bandit(tmp_path):
+    code = (
+        "import subprocess\n"
+        "subprocess.run(['python', '--version'], "
+        "shell=False, check=True, timeout=30)\n"
+    )
+
+    result = validate_fix_code(code, "B602")
+
+    assert result["valid"] is True
+
+
+def test_fix_rejected_if_original_finding_remains():
+    code = (
+        "import subprocess\n"
+        "subprocess.call('echo hello', shell=True)\n"
+    )
+
+    result = validate_fix_code(code, "B602")
+
+    assert result["valid"] is False
+    assert "original" in result["reason"].lower()
+
+
+def test_fix_rejected_if_syntax_is_invalid():
+    result = validate_fix_code(
+        "def broken(:\n    pass\n",
+        "B602"
+    )
+
+    assert result["valid"] is False
+    assert "syntax" in result["reason"].lower()
+
+def test_fix_rejected_if_new_high_finding_is_introduced():
+    code = (
+        "import subprocess\n"
+        "import pickle\n"
+        "subprocess.run(['python', '--version'], "
+        "shell=False, check=True, timeout=30)\n"
+        "pickle.loads(data)\n"
+    )
+
+    result = validate_fix_code(code, "B602")
+
+    assert result["valid"] is False
+    assert "HIGH or MEDIUM" in result["reason"]

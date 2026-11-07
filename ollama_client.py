@@ -6,12 +6,18 @@ check_ollama()   -> is the server up, and is the model installed?
 analyze_with_ollama() -> old string-returning helper, kept for backward compatibility.
 """
 
+import os
 import requests
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL",
+    "http://localhost:11434"
+).rstrip("/")
+
 OLLAMA_URL = f"{OLLAMA_BASE_URL}/api/generate"
 OLLAMA_TAGS_URL = f"{OLLAMA_BASE_URL}/api/tags"
-MODEL_NAME = "qwen2.5:1.5b"
+
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
 CONNECT_TIMEOUT_SECONDS = 5
 READ_TIMEOUT_SECONDS = 180   # per request; analyzer makes one small request per finding
@@ -24,7 +30,7 @@ GENERATION_OPTIONS = {
 }
 
 
-def query_ollama(prompt: str, model: str = MODEL_NAME) -> dict:
+def query_ollama(prompt: str, model: str = None, response_schema: dict = None) -> dict:
     """
     Send one prompt to Ollama.
 
@@ -32,11 +38,12 @@ def query_ollama(prompt: str, model: str = MODEL_NAME) -> dict:
     Failure: {"ok": False, "error_kind": "connection|timeout|http|invalid_response|request",
               "error": "<human-readable message>"}
     """
+    model = model or MODEL_NAME
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
+        "format": response_schema if response_schema else "json",
         "options": GENERATION_OPTIONS,
         "keep_alive": "10m",   # keep the model loaded between findings
     }
@@ -71,11 +78,12 @@ def query_ollama(prompt: str, model: str = MODEL_NAME) -> dict:
     return {"ok": True, "text": body["response"]}
 
 
-def check_ollama(model: str = MODEL_NAME) -> dict:
+def check_ollama(model: str = None) -> dict:
     """
     Check that the Ollama server is reachable and the model is installed.
     Returns {"available": bool, "model_installed": bool, "message": str}.
     """
+    model = model or MODEL_NAME
     try:
         response = requests.get(OLLAMA_TAGS_URL, timeout=3)
         response.raise_for_status()

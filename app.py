@@ -11,7 +11,7 @@ from analyzer import analyze_vulnerabilities
 from ollama_client import MODEL_NAME, check_ollama
 from report import build_json_report, build_markdown_report
 from safe_zip import MAX_ZIP_BYTES
-from scanner import scan_upload
+from scanner import scan_upload, validate_fix_code
 
 MAX_UPLOAD_BYTES = MAX_ZIP_BYTES
 SEVERITY_ICON = {"HIGH": "🔴", "MEDIUM": "🟠", "LOW": "🟡"}
@@ -108,14 +108,56 @@ def render_finding(finding: dict, item: dict | None):
         st.markdown(f"**Potential impact:** {item['impact']}")
         st.markdown(f"**Recommendation:** {item['recommendation']}")
         for note in item["notes"]:
-            st.info(note)
+           st.info(note)
+
         if item["fixed_code"]:
-            st.caption("Illustrative example. Adapt and test it. It is never applied to your files.")
-            st.code(item["fixed_code"], language="python")
+            validation = validate_fix_code(
+                item["fixed_code"],
+                item["test_id"]
+            )
+
+            if validation["valid"]:
+                st.markdown("#### Suggested Fix")
+
+                st.caption(
+                    "This example passed Python syntax and Bandit checks "
+                    "as an isolated snippet. It is not a verified patch "
+                    "for your project and is never applied automatically."
+                )
+
+                st.code(item["fixed_code"], language="python")
+
+            else:
+                st.warning(
+                    "Suggested fix hidden because validation failed: "
+                    + validation["reason"]
+                )
 
         if item["ai_status"] == "ok":
-            st.markdown(f"#### 🤖 AI explanation ({MODEL_NAME}, unverified)")
-            st.text(item["ai_explanation"])  # st.text: AI output is never rendered as markdown/HTML
+            st.markdown(f"#### 🤖 AI Security Assessment ({MODEL_NAME})")
+
+            triage_labels = {
+                "likely_true_positive": "Likely True Positive",
+                "likely_false_positive": "Likely False Positive",
+                "uncertain": "Uncertain"
+            }
+
+            triage = item.get("ai_triage", "uncertain")
+            triage_label = triage_labels.get(triage, "Uncertain")
+
+            st.markdown(f"**AI Triage:** {triage_label}")
+
+            st.markdown("**AI Assessment Reason:**")
+            st.text(item.get("ai_triage_reason", ""))
+
+            st.markdown("**AI Explanation:**")
+            st.text(item["ai_explanation"])
+
+            st.caption(
+                "AI assessment is advisory and unverified. "
+                "It does not change or remove Bandit findings."
+            )
+
         elif item["ai_note"]:
             st.caption(f"🤖 {item['ai_note']}")
 

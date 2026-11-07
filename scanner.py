@@ -9,6 +9,7 @@ Public functions:
 All return a dict with "status": "success" | "error".
 """
 
+import ast
 import json
 import subprocess
 import sys
@@ -212,6 +213,74 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
     except Exception as error:
         return _error(str(error))
 
+def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
+    """
+    Validate a proposed Python fix snippet using syntax parsing and Bandit.
+
+    The snippet is analyzed in isolation and is never executed.
+    """
+    if not isinstance(fixed_code, str) or not fixed_code.strip():
+        return {
+            "valid": False,
+            "reason": "No fix code was provided.",
+            "findings": []
+        }
+
+    if not isinstance(original_test_id, str) or not original_test_id:
+        return {
+            "valid": False,
+            "reason": "Original Bandit test ID is missing.",
+            "findings": []
+        }
+
+    try:
+        ast.parse(fixed_code)
+    except SyntaxError as error:
+        return {
+            "valid": False,
+            "reason": f"Invalid Python syntax: {error}",
+            "findings": []
+        }
+
+    with tempfile.TemporaryDirectory(prefix="securecode_fix_") as tmp:
+        candidate = Path(tmp) / "proposed_fix.py"
+        candidate.write_text(fixed_code, encoding="utf-8")
+
+        result = scan_file(str(candidate))
+
+    if result["status"] != "success":
+        return {
+            "valid": False,
+            "reason": result.get("error", "Bandit validation failed."),
+            "findings": []
+        }
+
+    findings = result["vulnerabilities"]
+
+    if any(f["test_id"] == original_test_id for f in findings):
+        return {
+            "valid": False,
+            "reason": "The original Bandit finding is still present.",
+            "findings": findings
+        }
+
+    dangerous = [
+        f for f in findings
+        if f["severity"] in ("HIGH", "MEDIUM")
+    ]
+
+    if dangerous:
+        return {
+            "valid": False,
+            "reason": "The proposed fix introduces HIGH or MEDIUM findings.",
+            "findings": findings
+        }
+
+    return {
+        "valid": True,
+        "reason": "The snippet passed syntax and Bandit checks.",
+        "findings": findings
+    }
 
 def scan_upload(file_path: str, original_name: str) -> dict:
     """Scan an uploaded .py or .zip file, reporting the user's original file name."""
@@ -221,3 +290,71 @@ def scan_upload(file_path: str, original_name: str) -> dict:
     if suffix == ".zip":
         return scan_zip(file_path, display_name=original_name)
     return _error("Unsupported file type. Upload a .py file or a .zip of Python files.")
+
+def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
+    """
+    Validate a proposed Python fix snippet using syntax parsing and Bandit.
+    The code is never executed.
+    """
+    if not isinstance(fixed_code, str) or not fixed_code.strip():
+        return {
+            "valid": False,
+            "reason": "No fix code was provided.",
+            "findings": []
+        }
+
+    if not isinstance(original_test_id, str) or not original_test_id:
+        return {
+            "valid": False,
+            "reason": "Original Bandit test ID is missing.",
+            "findings": []
+        }
+
+    try:
+        ast.parse(fixed_code)
+    except SyntaxError as error:
+        return {
+            "valid": False,
+            "reason": f"Invalid Python syntax: {error}",
+            "findings": []
+        }
+
+    with tempfile.TemporaryDirectory(prefix="securecode_fix_") as tmp:
+        candidate = Path(tmp) / "proposed_fix.py"
+        candidate.write_text(fixed_code, encoding="utf-8")
+
+        result = scan_file(str(candidate))
+
+    if result["status"] != "success":
+        return {
+            "valid": False,
+            "reason": result.get("error", "Bandit validation failed."),
+            "findings": []
+        }
+
+    findings = result["vulnerabilities"]
+
+    if any(f["test_id"] == original_test_id for f in findings):
+        return {
+            "valid": False,
+            "reason": "The original Bandit finding is still present.",
+            "findings": findings
+        }
+
+    dangerous = [
+        f for f in findings
+        if f["severity"] in ("HIGH", "MEDIUM")
+    ]
+
+    if dangerous:
+        return {
+            "valid": False,
+            "reason": "The proposed fix introduces HIGH or MEDIUM findings.",
+            "findings": findings
+        }
+
+    return {
+        "valid": True,
+        "reason": "The snippet passed syntax and Bandit checks.",
+        "findings": findings
+    }
