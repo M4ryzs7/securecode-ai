@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 from safe_zip import ZipSecurityError, extract_python_files
+from reachability import analyze_reachability
 
 MAX_FILE_BYTES = 1 * 1024 * 1024
 BANDIT_TIMEOUT_SECONDS = 120
@@ -128,6 +129,9 @@ def scan_file(file_path: str, display_name: str = None) -> dict:
         findings = _parse_findings(report, name_for)
         scan_errors = _parse_errors(report, name_for)
 
+        source_code = path.read_text(encoding="utf-8")
+        reachability_results = analyze_reachability(source_code)
+
         # A file Bandit could not parse must NOT be reported as "clean".
         if scan_errors and not findings:
             return _error(
@@ -146,6 +150,7 @@ def scan_file(file_path: str, display_name: str = None) -> dict:
             "lines_scanned": _lines_scanned(report),
             "total_issues": len(findings),
             "vulnerabilities": findings,
+            "reachability": reachability_results,
             "scan_errors": scan_errors,
             "skipped_files": [],
             "warnings": warnings,
@@ -191,6 +196,25 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
             report = outcome["report"]
             findings = _parse_findings(report, name_for)
             scan_errors = _parse_errors(report, name_for)
+            reachability_results = []
+            warnings = []
+
+            for relative_path in extraction.extracted:
+                python_file = root / relative_path
+
+                try:
+                    source_code = python_file.read_text(encoding="utf-8")
+                    file_results = analyze_reachability(source_code)
+
+                    for entry in file_results:
+                        entry["file"] = relative_path
+
+                    reachability_results.extend(file_results)
+
+                except (OSError, UnicodeDecodeError):
+                    warnings.append(
+                        f"Reachability analysis could not read: {relative_path}"
+                    )
 
             warnings = []
             if scan_errors:
@@ -206,6 +230,7 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                 "lines_scanned": _lines_scanned(report),
                 "total_issues": len(findings),
                 "vulnerabilities": findings,
+                "reachability": reachability_results,
                 "scan_errors": scan_errors,
                 "skipped_files": extraction.skipped,
                 "warnings": warnings,

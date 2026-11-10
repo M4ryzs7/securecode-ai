@@ -29,6 +29,7 @@ def build_json_report(scan_result: dict, analysis: dict = None) -> str:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "disclaimer": DISCLAIMER,
         "bandit": scan_result,
+        "reachability": scan_result.get("reachability", []),
         "interpretation": analysis if analysis and analysis.get("status") == "success" else None,
     }
     return json.dumps(report, indent=2, ensure_ascii=False)
@@ -90,6 +91,37 @@ def build_markdown_report(scan_result: dict, analysis: dict = None) -> str:
             lines.append("")
 
     skipped = scan_result.get("skipped_files", [])
+    # ------------------------------------------------ Reachability Analysis
+    reachability = scan_result.get("reachability", [])
+
+    lines += ["## Reachability Analysis", ""]
+
+    if not reachability:
+        lines.append("No Flask routes with reachable dangerous sinks detected.")
+    else:
+        for entry in reachability:
+            route = entry.get("route", "Unknown route")
+            function = entry.get("entry_function", "Unknown function")
+            sink = entry.get("sink") or {}
+            source = entry.get("source")
+
+            lines.append(f"### Route: `{route}`")
+            lines.append(f"- Entry function: `{function}`")
+            lines.append(f"- Dangerous sink: `{sink.get('name', 'Unknown')}`")
+
+            if source:
+                lines.append(f"- Input source: `{source.get('name', 'Unknown')}`")
+                lines.append(f"- Variable: `{source.get('variable', 'Unknown')}`")
+            else:
+                lines.append("- Input source: None detected")
+
+            lines.append("")
+
+        lines.append(
+            "> Reachability indicates a possible code path; "
+            "it does not prove exploitability."
+        )
+        lines.append("")
     if skipped:
         lines += ["## Skipped files", ""]
         lines += [f"- `{s['name']}`: {s['reason']}" for s in skipped[:200]]

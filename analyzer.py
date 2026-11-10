@@ -368,11 +368,18 @@ def analyze_vulnerabilities(scan_result: dict, use_ai: bool = True,
         return {"status": "error", "error": "Invalid scan result."}
 
     findings = scan_result.get("vulnerabilities", [])
-    if not findings:
-        return {"status": "success", "summary": "No Bandit findings detected.",
-                "analyses": [], "model": MODEL_NAME, "warnings": [],
-                "ai_stats": {"requested": 0, "generated": 0, "rejected": 0}}
+    reachability_results = scan_result.get("reachability", [])
 
+    if not findings:
+        return {
+            "status": "success",
+            "summary": "No Bandit findings detected.",
+            "analyses": [],
+            "reachability": reachability_results,
+            "model": MODEL_NAME,
+            "warnings": [],
+            "ai_stats": {"requested": 0, "generated": 0, "rejected": 0}
+        }
     analyses = [_base_analysis(f) for f in findings]
     warnings = []
     stats = {"requested": 0, "generated": 0, "rejected": 0}
@@ -396,6 +403,7 @@ def analyze_vulnerabilities(scan_result: dict, use_ai: bool = True,
         "status": "success",
         "summary": _build_summary(findings),
         "analyses": analyses,
+        "reachability": reachability_results,
         "model": MODEL_NAME,
         "warnings": warnings,
         "ai_stats": stats,

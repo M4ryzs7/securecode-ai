@@ -38,3 +38,36 @@ def test_json_report_keeps_bandit_and_ai_separate():
 
 def test_json_report_without_analysis():
     assert json.loads(build_json_report(SCAN))["interpretation"] is None
+
+def test_json_report_includes_reachability():
+    reachability = [{
+        "route": "/search",
+        "entry_function": "search",
+        "sink": {"name": "eval", "function": "search", "line": 7},
+        "source": {"name": "request.args.get", "variable": "user_input"}
+    }]
+
+    scan_result = {**SCAN, "reachability": reachability}
+
+    data = json.loads(build_json_report(scan_result))
+
+    assert data["reachability"] == reachability
+
+
+def test_markdown_report_includes_reachability():
+    reachability = [{
+        "route": "/search",
+        "entry_function": "search",
+        "sink": {"name": "eval", "function": "search", "line": 7},
+        "source": {"name": "request.args.get", "variable": "user_input"}
+    }]
+
+    scan_result = {**SCAN, "reachability": reachability}
+
+    md = build_markdown_report(scan_result)
+
+    assert "Reachability Analysis" in md
+    assert "/search" in md
+    assert "eval" in md
+    assert "request.args.get" in md
+    assert "user_input" in md

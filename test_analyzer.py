@@ -381,3 +381,21 @@ def test_evidence_checker_accepts_shell_true_claim():
 
     assert valid is True
     assert reason is None
+
+def test_analyzer_preserves_reachability_results():
+    reachability = [
+        {
+            "route": "/search",
+            "function": "search",
+            "reachable_sinks": ["eval"],
+            "sources": ["request.args.get"]
+        }
+    ]
+
+    scan_result = scan(finding())
+    scan_result["reachability"] = reachability
+
+    result = analyze_vulnerabilities(scan_result, use_ai=False)
+
+    assert result["status"] == "success"
+    assert result["reachability"] == reachability

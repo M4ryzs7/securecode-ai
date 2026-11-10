@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 import scanner
-from scanner import scan_file, validate_fix_code
+from scanner import scan_file, scan_zip, scan_upload, validate_fix_code
 
 VULNERABLE = (
     "import subprocess\n"                      # 1
@@ -171,3 +171,68 @@ def test_fix_rejected_if_new_high_finding_is_introduced():
 
     assert result["valid"] is False
     assert "HIGH or MEDIUM" in result["reason"]
+
+def test_scan_file_includes_reachability_results(tmp_path):
+    code = (
+        "from flask import Flask\n"
+        "app = Flask(__name__)\n"
+        '@app.route("/search")\n'
+        "def search():\n"
+        "    eval('1 + 1')\n"
+        '    return "OK"\n'
+    )
+
+    result = scan_file(write(tmp_path, "app.py", code))
+
+    assert result["status"] == "success"
+    assert "reachability" in result
+    assert len(result["reachability"]) == 1
+    assert result["reachability"][0]["route"] == "/search"
+
+def test_scan_file_includes_reachability_results(tmp_path):
+    code = (
+        "from flask import Flask\n"
+        "app = Flask(__name__)\n"
+        '@app.route("/search")\n'
+        "def search():\n"
+        "    eval('1 + 1')\n"
+        '    return "OK"\n'
+    )
+
+    result = scan_file(write(tmp_path, "app.py", code))
+
+    assert result["status"] == "success"
+    assert "reachability" in result
+    assert len(result["reachability"]) == 1
+    assert result["reachability"][0]["route"] == "/search"
+
+def test_scan_zip_includes_reachability_results(tmp_path):
+    import zipfile
+
+    code = (
+        "from flask import Flask, request\n"
+        "app = Flask(__name__)\n"
+        '@app.route("/search")\n'
+        "def search():\n"
+        "    user_input = request.args.get('q')\n"
+        "    eval(user_input)\n"
+        '    return "OK"\n'
+    )
+
+    zip_path = tmp_path / "project.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("app.py", code)
+
+    result = scan_zip(str(zip_path))
+
+    assert result["status"] == "success"
+    assert "reachability" in result
+    assert len(result["reachability"]) == 1
+
+    finding = result["reachability"][0]
+
+    assert finding["route"] == "/search"
+    assert finding["sink"]["name"] == "eval"
+    assert finding["source"]["name"] == "request.args.get"
+    assert finding["file"] == "app.py"

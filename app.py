@@ -182,6 +182,36 @@ if "scan_result" in st.session_state:
         cols[2].metric("🔴 High", counts["HIGH"])
         cols[3].metric("🟠 Medium", counts["MEDIUM"])
         cols[4].metric("🟡 Low", counts["LOW"])
+         # ------------------------------------------------ Reachability Analysis
+        st.subheader("🔗 Reachability Analysis")
+
+        reachability_results = result.get("reachability", [])
+
+        if reachability_results:
+            for entry in reachability_results:
+                route = clean(entry.get("route", "Unknown route"))
+                function = clean(entry.get("entry_function", "Unknown function"))
+
+                sink = entry.get("sink") or {}
+                source = entry.get("source")
+
+                with st.expander(f"{route} → {function}"):
+                    st.write("**Reachable dangerous sink:**")
+                    st.text(sink.get("name", "None detected"))
+
+                    st.write("**Detected input source:**")
+                    if source:
+                        st.text(source.get("name", "Unknown source"))
+                        st.caption(f"Variable: {source.get('variable', 'Unknown')}")
+                    else:
+                        st.text("None detected")
+
+            st.caption(
+                "Reachability indicates a possible code path. "
+                "It does not prove that a vulnerability is exploitable."
+            )
+        else:
+            st.info("No Flask routes with reachable sinks detected.")
 
         if result.get("skipped_files"):
             with st.expander(f"Skipped files ({len(result['skipped_files'])})"):
