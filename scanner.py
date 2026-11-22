@@ -104,6 +104,33 @@ def _lines_scanned(report: dict) -> int:
         return 0
 
 
+def attach_reachability(findings: list, reachability: list) -> None:
+    """
+    Add "reachability" and "evidence" to every Bandit finding (in place).
+
+    Values:
+      tainted_reachable - a route reaches the sink AND user input flows into it
+      reachable         - a route reaches the sink, no user-input flow was proven
+      unknown           - the analysis did not model this finding (NOT "safe")
+
+    Reachability is used for RANKING only. It must never hide a finding.
+    """
+    by_location = {}
+    for entry in reachability:
+        key = (entry.get("file"), entry["sink"]["line"])
+        by_location.setdefault(key, []).append(entry)
+
+    for finding in findings:
+        hits = by_location.get((finding["file"], finding["line"]), [])
+        if not hits:
+            finding["reachability"] = "unknown"
+        elif any(hit.get("source") for hit in hits):
+            finding["reachability"] = "tainted_reachable"
+        else:
+            finding["reachability"] = "reachable"
+        finding["evidence"] = hits
+
+
 def scan_file(file_path: str, display_name: str = None) -> dict:
     """Scan one Python file with Bandit. The source code is analyzed, not executed."""
     path = Path(file_path)
@@ -131,6 +158,9 @@ def scan_file(file_path: str, display_name: str = None) -> dict:
 
         source_code = path.read_text(encoding="utf-8")
         reachability_results = analyze_reachability(source_code)
+        for entry in reachability_results:
+            entry["file"] = shown_name
+        attach_reachability(findings, reachability_results)
 
         # A file Bandit could not parse must NOT be reported as "clean".
         if scan_errors and not findings:
@@ -207,7 +237,7 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                     file_results = analyze_reachability(source_code)
 
                     for entry in file_results:
-                        entry["file"] = relative_path
+                        entry["file"] = Path(relative_path).as_posix()
 
                     reachability_results.extend(file_results)
 
@@ -216,7 +246,8 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                         f"Reachability analysis could not read: {relative_path}"
                     )
 
-            warnings = []
+            attach_reachability(findings, reachability_results)
+
             if scan_errors:
                 warnings.append(
                     f"{len(scan_errors)} file(s) could not be analyzed by Bandit "
@@ -238,34 +269,22 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
     except Exception as error:
         return _error(str(error))
 
+
 def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
     """
     Validate a proposed Python fix snippet using syntax parsing and Bandit.
-
     The snippet is analyzed in isolation and is never executed.
     """
     if not isinstance(fixed_code, str) or not fixed_code.strip():
-        return {
-            "valid": False,
-            "reason": "No fix code was provided.",
-            "findings": []
-        }
+        return {"valid": False, "reason": "No fix code was provided.", "findings": []}
 
     if not isinstance(original_test_id, str) or not original_test_id:
-        return {
-            "valid": False,
-            "reason": "Original Bandit test ID is missing.",
-            "findings": []
-        }
+        return {"valid": False, "reason": "Original Bandit test ID is missing.", "findings": []}
 
     try:
         ast.parse(fixed_code)
     except SyntaxError as error:
-        return {
-            "valid": False,
-            "reason": f"Invalid Python syntax: {error}",
-            "findings": []
-        }
+        return {"valid": False, "reason": f"Invalid Python syntax: {error}", "findings": []}
 
     with tempfile.TemporaryDirectory(prefix="securecode_fix_") as tmp:
         candidate = Path(tmp) / "proposed_fix.py"
@@ -277,7 +296,7 @@ def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
         return {
             "valid": False,
             "reason": result.get("error", "Bandit validation failed."),
-            "findings": []
+            "findings": [],
         }
 
     findings = result["vulnerabilities"]
@@ -286,26 +305,23 @@ def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
         return {
             "valid": False,
             "reason": "The original Bandit finding is still present.",
-            "findings": findings
+            "findings": findings,
         }
 
-    dangerous = [
-        f for f in findings
-        if f["severity"] in ("HIGH", "MEDIUM")
-    ]
-
+    dangerous = [f for f in findings if f["severity"] in ("HIGH", "MEDIUM")]
     if dangerous:
         return {
             "valid": False,
             "reason": "The proposed fix introduces HIGH or MEDIUM findings.",
-            "findings": findings
+            "findings": findings,
         }
 
     return {
         "valid": True,
         "reason": "The snippet passed syntax and Bandit checks.",
-        "findings": findings
+        "findings": findings,
     }
+
 
 def scan_upload(file_path: str, original_name: str) -> dict:
     """Scan an uploaded .py or .zip file, reporting the user's original file name."""
@@ -315,71 +331,3 @@ def scan_upload(file_path: str, original_name: str) -> dict:
     if suffix == ".zip":
         return scan_zip(file_path, display_name=original_name)
     return _error("Unsupported file type. Upload a .py file or a .zip of Python files.")
-
-def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
-    """
-    Validate a proposed Python fix snippet using syntax parsing and Bandit.
-    The code is never executed.
-    """
-    if not isinstance(fixed_code, str) or not fixed_code.strip():
-        return {
-            "valid": False,
-            "reason": "No fix code was provided.",
-            "findings": []
-        }
-
-    if not isinstance(original_test_id, str) or not original_test_id:
-        return {
-            "valid": False,
-            "reason": "Original Bandit test ID is missing.",
-            "findings": []
-        }
-
-    try:
-        ast.parse(fixed_code)
-    except SyntaxError as error:
-        return {
-            "valid": False,
-            "reason": f"Invalid Python syntax: {error}",
-            "findings": []
-        }
-
-    with tempfile.TemporaryDirectory(prefix="securecode_fix_") as tmp:
-        candidate = Path(tmp) / "proposed_fix.py"
-        candidate.write_text(fixed_code, encoding="utf-8")
-
-        result = scan_file(str(candidate))
-
-    if result["status"] != "success":
-        return {
-            "valid": False,
-            "reason": result.get("error", "Bandit validation failed."),
-            "findings": []
-        }
-
-    findings = result["vulnerabilities"]
-
-    if any(f["test_id"] == original_test_id for f in findings):
-        return {
-            "valid": False,
-            "reason": "The original Bandit finding is still present.",
-            "findings": findings
-        }
-
-    dangerous = [
-        f for f in findings
-        if f["severity"] in ("HIGH", "MEDIUM")
-    ]
-
-    if dangerous:
-        return {
-            "valid": False,
-            "reason": "The proposed fix introduces HIGH or MEDIUM findings.",
-            "findings": findings
-        }
-
-    return {
-        "valid": True,
-        "reason": "The snippet passed syntax and Bandit checks.",
-        "findings": findings
-    }
