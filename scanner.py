@@ -18,6 +18,7 @@ from pathlib import Path
 
 from safe_zip import ZipSecurityError, extract_python_files
 from reachability import analyze_reachability
+from findings import make_finding, sort_and_number
 
 MAX_FILE_BYTES = 1 * 1024 * 1024
 BANDIT_TIMEOUT_SECONDS = 120
@@ -69,25 +70,21 @@ def _parse_findings(report: dict, name_for) -> list:
     findings = []
     for issue in report.get("results", []):
         cwe = issue.get("issue_cwe") or {}
-        findings.append({
-            "type": issue.get("test_name", "Unknown"),
-            "test_id": issue.get("test_id", ""),
-            "severity": str(issue.get("issue_severity", "UNKNOWN")).upper(),
-            "confidence": str(issue.get("issue_confidence", "UNKNOWN")).upper(),
-            "line": issue.get("line_number"),
-            "description": issue.get("issue_text", ""),
-            "code": issue.get("code", ""),
-            "more_info": issue.get("more_info", ""),
-            "cwe": f"CWE-{cwe['id']}" if cwe.get("id") else "",
-            "file": name_for(issue.get("filename", "")),
-        })
-
-    findings.sort(key=lambda f: (
-        _SEVERITY_RANK.get(f["severity"], 3), f["file"], f["line"] or 0
-    ))
-    for number, finding in enumerate(findings, start=1):
-        finding["id"] = f"F{number:03d}"   # stable ID used to link AI output to findings
-    return findings
+        findings.append(make_finding(
+            language="python",
+            tool="bandit",
+            type=issue.get("test_name", "Unknown"),
+            test_id=issue.get("test_id", ""),
+            severity=str(issue.get("issue_severity", "UNKNOWN")).upper(),
+            confidence=str(issue.get("issue_confidence", "UNKNOWN")).upper(),
+            line=issue.get("line_number"),
+            description=issue.get("issue_text", ""),
+            code=issue.get("code", ""),
+            more_info=issue.get("more_info", ""),
+            cwe=f"CWE-{cwe['id']}" if cwe.get("id") else "",
+            file=name_for(issue.get("filename", "")),
+        ))
+    return sort_and_number(findings)
 
 
 def _parse_errors(report: dict, name_for) -> list:
