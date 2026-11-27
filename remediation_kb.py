@@ -1,12 +1,12 @@
 """
-remediation_kb.py - Curated, deterministic security guidance keyed by Bandit test ID.
+remediation_kb.py - Curated, deterministic security guidance keyed by static-analysis test ID.
 
 Why this exists: a 1.5B-parameter model cannot be trusted to write secure fixes.
 Explanations, impact statements, recommendations and code examples for known
-Bandit tests are written here by hand, reviewed by a human, and never change
+security rules are written here by hand, reviewed by a human, and never change
 between runs. The LLM only adds a short plain-English explanation on top.
 
-Categories (we never call anything a "confirmed" vulnerability, because Bandit
+Categories (we never call anything a "confirmed" vulnerability, because static analysis
 cannot know where data really comes from):
     informational            - a pattern worth knowing about, not a problem by itself
     warning                  - may or may not be a problem, depends on context
@@ -408,6 +408,36 @@ KNOWLEDGE_BASE = {
     "B703": None,  # filled below (same as B308)
 }
 
+# ------------------------------------------------ JavaScript / Semgrep
+
+KNOWLEDGE_BASE["javascript-eval"] = _entry(
+    "potential_vulnerability",
+    "JavaScript eval() executes a string as JavaScript code.",
+    "If attacker-controlled input reaches eval(), an attacker may execute "
+    "arbitrary JavaScript in the application's execution context.",
+    "Avoid eval(). Use JSON.parse() when parsing JSON data, or use an "
+    "explicit allow-list of permitted operations when selecting actions.",
+    'const data = JSON.parse(userInput);',
+    [
+        "JSON.parse() is only suitable when the expected input is valid JSON.",
+        "It is not a drop-in replacement for every eval() use case."
+    ],
+)
+
+KNOWLEDGE_BASE["javascript-innerhtml"] = _entry(
+    "potential_vulnerability",
+    "Assigning untrusted data to innerHTML can introduce cross-site scripting (XSS).",
+    "An attacker may inject HTML or JavaScript into a page if untrusted "
+    "input is inserted without appropriate sanitization.",
+    "Use textContent when displaying plain text. If HTML is required, "
+    "use a trusted HTML sanitizer.",
+    'document.getElementById("out").textContent = userInput;',
+    [
+        "textContent displays input as text rather than interpreting it as HTML.",
+        "For rich HTML, use a maintained sanitizer such as DOMPurify."
+    ],
+)
+
 # Entries that share guidance with another one.
 KNOWLEDGE_BASE["B106"] = KNOWLEDGE_BASE["B105"]
 KNOWLEDGE_BASE["B107"] = KNOWLEDGE_BASE["B105"]
@@ -445,21 +475,126 @@ for _import_id in ("B401", "B402", "B403", "B405", "B406", "B407", "B408", "B409
                    "B410", "B411", "B412", "B413", "B415"):
     KNOWLEDGE_BASE[_import_id] = _IMPORT_ENTRY
 
+# ------------------------------------------------- JavaScript (Semgrep rules)
+# Keys are the rule ids in rules/js_security.yml.
 
-def get_guidance(test_id: str, bandit_description: str = "",
-                 severity: str = "", confidence: str = "") -> dict:
-    """Return guidance for a Bandit test ID (a fresh dict, safe to modify)."""
+_JS_EVAL_IMPACT = (
+    "If any part of the string can be influenced by an outside party (a URL parameter, "
+    "form input, a message from another window, an API response), they may be able to run "
+    "their own code. In a browser that is cross-site scripting (XSS); in Node.js it is code "
+    "execution on the server. If the string is a constant you wrote, the risk is much lower, "
+    "but the pattern is still discouraged."
+)
+
+_JS_EVAL_RECOMMENDATION = (
+    "Decide what the code really needs. (1) If the input is JSON data, use `JSON.parse()`. "
+    "(2) If the input names an action, use an allow-list of functions (example below). "
+    "(3) If you need arithmetic, use a dedicated expression parser. Do not try to 'clean' "
+    "the string with filters; that is easy to bypass."
+)
+
+_JS_EVAL_FIX = '''\
+// 1) The input is JSON data: parse it, do not run it.
+const data = JSON.parse(userInput);
+
+// 2) The input names an action: only allow-listed functions can ever run.
+const actions = {
+  version: () => "1.0",
+  status: () => "ok",
+};
+
+function runAction(name) {
+  const handler = Object.hasOwn(actions, name) ? actions[name] : undefined;
+  if (!handler) {
+    throw new Error("Unsupported action");
+  }
+  return handler();
+}'''
+
+_JS_EVAL_NOTES = [
+    "`Object.hasOwn` (or a `Map`) is used so names such as \"constructor\" cannot reach "
+    "inherited properties.",
+    "Removing eval() also lets you use a strict Content-Security-Policy without 'unsafe-eval'.",
+]
+
+KNOWLEDGE_BASE["js-eval"] = _entry(
+    "potential_vulnerability",
+    "`eval()` runs a string as JavaScript code, with access to the surrounding variables.",
+    _JS_EVAL_IMPACT,
+    _JS_EVAL_RECOMMENDATION,
+    _JS_EVAL_FIX,
+    _JS_EVAL_NOTES,
+)
+
+KNOWLEDGE_BASE["js-new-function"] = _entry(
+    "potential_vulnerability",
+    "The `Function` constructor builds a function from a string, which is the same risk as "
+    "`eval()`.",
+    _JS_EVAL_IMPACT,
+    _JS_EVAL_RECOMMENDATION,
+    _JS_EVAL_FIX,
+    _JS_EVAL_NOTES,
+)
+
+KNOWLEDGE_BASE["js-innerhtml"] = _entry(
+    "potential_vulnerability",
+    "Assigning a string to `innerHTML` makes the browser parse it as HTML. Markup such as "
+    "`<img src=x onerror=...>` can run script through event-handler attributes.",
+    "If the string contains data from a user, a URL, an API or another untrusted source, an "
+    "attacker may be able to run their own JavaScript in the visitor's page (cross-site "
+    "scripting): read page data, act as the user, or change what the page shows. If the value "
+    "is a constant or plain text you control, the risk is much lower.",
+    "If you are inserting plain text, use `textContent`. If you are building structure, create "
+    "elements with `createElement` instead of joining HTML strings. Only if you truly must "
+    "render HTML that users supply, sanitize it first with a maintained library; do not write "
+    "your own filter.",
+    '''\
+// Plain text: the browser never parses it as HTML.
+element.textContent = userInput;
+
+// Building structure: create nodes instead of concatenating HTML strings.
+const item = document.createElement("li");
+item.textContent = userInput;
+list.append(item);''',
+    [
+        "For user-supplied HTML (for example a rich-text editor), sanitize it with a maintained "
+        "library such as DOMPurify, then assign the sanitized result.",
+        "A Content-Security-Policy adds a second layer of defense but does not replace "
+        "escaping or sanitizing.",
+    ],
+)
+
+KNOWLEDGE_BASE["js-document-write"] = _entry(
+    "potential_vulnerability",
+    "`document.write()` inserts a string into the page as HTML while the page loads. Script "
+    "elements written this way can execute.",
+    "If the string contains data from an untrusted source, an attacker may be able to run "
+    "their own JavaScript in the visitor's page (cross-site scripting). `document.write()` is "
+    "also discouraged for performance reasons.",
+    "Create elements with `createElement`, set their text with `textContent`, and add them to "
+    "the page with `append`. Load scripts by creating a `script` element with a fixed `src`.",
+    '''\
+const message = document.createElement("p");
+message.textContent = userInput;
+document.body.append(message);''',
+)
+
+def get_guidance(test_id: str, description: str = "",
+                 severity: str = "", confidence: str = "",
+                 bandit_description: str = None) -> dict:
+    """Return guidance for a static-analysis test ID (a fresh dict, safe to modify)."""
     entry = KNOWLEDGE_BASE.get(test_id)
-
+    if bandit_description is not None and not description:
+        description = bandit_description
     if entry is None:
         guidance = {
             "curated": False,
             "category": "warning",
-            "explanation": bandit_description or "Bandit reported this pattern.",
+            "explanation": description or "Static analysis reported this pattern.",
             "impact": "No curated guidance exists for this test ID, so the impact is not described here.",
             "recommendation": (
-                "Open the Bandit documentation link for this test ID and decide based on how "
-                "this code is actually used."
+                "Review the static-analysis rule documentation for this test ID "
+                "and decide based on how this code is actually used."
             ),
             "fixed_code": "",
             "notes": [],
@@ -471,14 +606,14 @@ def get_guidance(test_id: str, bandit_description: str = "",
 
     guidance["category_label"] = CATEGORY_LABELS[guidance["category"]]
 
-    # Context-aware notes derived from Bandit's own ratings.
+    # Context-aware notes based on finding metadata.
     if test_id in ("B602", "B604") and severity == "LOW":
         guidance["notes"].append(
-            "Bandit rated this LOW, which for shell=True usually means the command is a fixed string "
+            "The analyzer rated this LOW, which for shell=True usually means the command is a fixed string "
             "rather than a variable. Avoiding the shell is still the better practice."
         )
     if confidence == "LOW":
         guidance["notes"].append(
-            "Bandit's confidence for this finding is LOW, so it has a higher chance of being a false positive."
+            "The analyzer's confidence for this finding is LOW, so it has a higher chance of being a false positive."
         )
     return guidance
