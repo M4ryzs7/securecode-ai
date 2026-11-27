@@ -1,5 +1,7 @@
 # 🛡️ SecureCode AI
 
+![Tests](https://github.com/M4ryzs7/securecode-ai/actions/workflows/tests.yml/badge.svg)
+
 **AI-Assisted Python and JavaScript Code Security Scanner**
 
 SecureCode AI is a local, AI-assisted security analysis tool. It scans individual source files and project ZIP archives to find potentially risky coding patterns, explains them, and suggests how to fix them.
