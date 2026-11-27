@@ -233,7 +233,7 @@ To try JavaScript scanning, upload `samples/js_sample.js`.
 python -m pytest -q
 ```
 
-**Current verified test status: 188 passed.**
+**Current verified test status: 196 passed.**
 
 Tests that need a running Semgrep installation are skipped when it is not available. For a local integration check with Ollama:
 
