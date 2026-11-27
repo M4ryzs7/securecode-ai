@@ -14,13 +14,15 @@ import json
 import subprocess
 import sys
 import tempfile
-
 from pathlib import Path
 
 from safe_zip import ZipSecurityError, extract_python_files
 from reachability import analyze_reachability
 from findings import make_finding, sort_and_number
-from semgrep_scanner import JS_SUFFIXES, scan_js_file
+from semgrep_scanner import (
+    DEFAULT_CONFIG, JS_SUFFIXES, parse_semgrep, parse_semgrep_errors,
+    run_semgrep, scan_js_file,
+)
 
 MAX_FILE_BYTES = 1 * 1024 * 1024
 BANDIT_TIMEOUT_SECONDS = 120
@@ -189,7 +191,7 @@ def scan_file(file_path: str, display_name: str = None) -> dict:
 
 
 def scan_zip(zip_path: str, display_name: str = None) -> dict:
-    """Safely extract the .py files of a ZIP and scan them. Nothing is executed."""
+    """Safely extract the .py/.js files of a ZIP and scan them. Nothing is executed."""
     path = Path(zip_path)
 
     if not path.is_file():
@@ -208,7 +210,13 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                 return _error(f"Archive rejected: {error}")
 
             if not extraction.extracted:
-                return _error("No Python (.py) files were found in the archive.")
+                return _error(
+                    "No Python (.py) or JavaScript (.js) files were found in the archive."
+                )
+
+            py_files = [n for n in extraction.extracted if n.lower().endswith(".py")]
+            js_files = [n for n in extraction.extracted
+                        if Path(n).suffix.lower() in JS_SUFFIXES]
 
             root_resolved = root.resolve()
 
@@ -218,38 +226,62 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                 except (ValueError, OSError):
                     return Path(filename).name
 
-            outcome = _run_bandit(root, recursive=True)
-            if not outcome["ok"]:
-                return _error(outcome["error"])
-
-            report = outcome["report"]
-            findings = _parse_findings(report, name_for)
-            scan_errors = _parse_errors(report, name_for)
+            findings = []
+            scan_errors = []
             reachability_results = []
             warnings = []
+            lines_scanned = 0
 
-            for relative_path in extraction.extracted:
-                python_file = root / relative_path
+            if py_files:
+                outcome = _run_bandit(root, recursive=True)
+                if not outcome["ok"]:
+                    return _error(outcome["error"])
 
-                try:
-                    source_code = python_file.read_text(encoding="utf-8")
-                    file_results = analyze_reachability(source_code)
+                report = outcome["report"]
+                findings.extend(_parse_findings(report, name_for))
+                scan_errors.extend(_parse_errors(report, name_for))
+                lines_scanned += _lines_scanned(report)
 
-                    for entry in file_results:
-                        entry["file"] = Path(relative_path).as_posix()
+                for relative_path in py_files:
+                    python_file = root / relative_path
+                    try:
+                        source_code = python_file.read_text(encoding="utf-8")
+                        file_results = analyze_reachability(source_code)
+                        for entry in file_results:
+                            entry["file"] = Path(relative_path).as_posix()
+                        reachability_results.extend(file_results)
+                    except (OSError, UnicodeDecodeError):
+                        warnings.append(
+                            f"Reachability analysis could not read: {relative_path}"
+                        )
 
-                    reachability_results.extend(file_results)
+            if js_files:
+                outcome = run_semgrep(root, DEFAULT_CONFIG)
+                if not outcome["ok"]:
+                    return _error(outcome["error"])
 
-                except (OSError, UnicodeDecodeError):
-                    warnings.append(
-                        f"Reachability analysis could not read: {relative_path}"
-                    )
+                report = outcome["report"]
+                findings.extend(parse_semgrep(
+                    report, name_for, short_ids=Path(DEFAULT_CONFIG).is_file()
+                ))
+                scan_errors.extend(parse_semgrep_errors(report, name_for))
 
+                for relative_path in js_files:
+                    try:
+                        text = (root / relative_path).read_text(
+                            encoding="utf-8", errors="replace")
+                        lines_scanned += len(text.splitlines())
+                    except OSError:
+                        pass
+
+            # One combined, stable numbering across both scanners.
+            sort_and_number(findings)
+            # JS findings get "unknown" reachability: not modeled, NOT "safe".
             attach_reachability(findings, reachability_results)
 
             if scan_errors:
                 warnings.append(
-                    f"{len(scan_errors)} file(s) could not be analyzed by Bandit "
+                    f"{len(scan_errors)} file(s) could not be analyzed "
                     "and are NOT covered by these results."
                 )
 
@@ -257,7 +289,7 @@ def scan_zip(zip_path: str, display_name: str = None) -> dict:
                 "status": "success",
                 "file": display_name or path.name,
                 "files_scanned": len(extraction.extracted),
-                "lines_scanned": _lines_scanned(report),
+                "lines_scanned": lines_scanned,
                 "total_issues": len(findings),
                 "vulnerabilities": findings,
                 "reachability": reachability_results,

@@ -7,6 +7,7 @@ rules:
       - pattern: eval(...)
       - pattern-not: eval("...")
     metadata:
+      title: Use of eval()
       cwe: ["CWE-95: Eval Injection"]
       confidence: MEDIUM
       references: ["https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval"]
@@ -19,6 +20,7 @@ rules:
       - pattern: new Function(...)
       - pattern-not: new Function("...")
     metadata:
+      title: Use of the Function constructor
       cwe: ["CWE-95: Eval Injection"]
       confidence: MEDIUM
 
@@ -30,6 +32,7 @@ rules:
       - pattern: $EL.innerHTML = $VALUE
       - pattern-not: $EL.innerHTML = "..."
     metadata:
+      title: Assignment to innerHTML
       cwe: ["CWE-79: Cross-site Scripting"]
       confidence: MEDIUM
 
@@ -39,5 +42,6 @@ rules:
     message: document.write() inserts a string into the page as HTML, which may allow cross-site scripting if the value is not trusted.
     pattern: document.write(...)
     metadata:
+      title: Use of document.write()
       cwe: ["CWE-79: Cross-site Scripting"]
       confidence: LOW

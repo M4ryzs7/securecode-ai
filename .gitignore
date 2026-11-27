@@ -6,3 +6,7 @@ __pycache__/
 .streamlit/secrets.toml
 *.zip
 evaluation/results.json
+*.zip
+.venv/
+benchmark/projects/
+benchmark/excluded/

@@ -138,3 +138,52 @@ def test_extracted_code_is_not_executed(tmp_path):
     code = f"open(r'{marker}', 'w').write('x')\n"
     scan_zip(make_zip(tmp_path, {"run_me.py": code}))
     assert not marker.exists()
+
+def test_safe_zip_extracts_js_and_skips_minified(tmp_path):
+    import zipfile
+    import safe_zip
+
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("a.py", "x = 1\n")
+        zf.writestr("web/app.js", "let a = 1;\n")
+        zf.writestr("web/app.min.js", "var a=1;")
+        zf.writestr("notes.txt", "hi")
+
+    result = safe_zip.extract_python_files(zip_path, tmp_path / "out")
+
+    assert sorted(result.extracted) == ["a.py", "web/app.js"]
+    reasons = {s["name"]: s["reason"] for s in result.skipped}
+    assert reasons["web/app.min.js"] == "minified file"
+
+
+def test_scan_zip_scans_js_files(tmp_path, monkeypatch):
+    import zipfile
+    from pathlib import Path
+    import scanner
+
+    def fake_run_semgrep(target, config=None):
+        js = Path(target) / "web" / "app.js"
+        return {"ok": True, "report": {"results": [{
+            "check_id": "rules.js-eval",
+            "path": str(js),
+            "start": {"line": 2}, "end": {"line": 2},
+            "extra": {"message": "eval", "severity": "ERROR",
+                      "metadata": {"cwe": ["CWE-95: Eval Injection"]}},
+        }], "errors": []}}
+
+    monkeypatch.setattr(scanner, "run_semgrep", fake_run_semgrep)
+
+    zip_path = tmp_path / "p.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("web/app.js", "const q = 1;\neval(q);\n")
+
+    result = scanner.scan_zip(str(zip_path))
+
+    assert result["status"] == "success"
+    assert result["files_scanned"] == 1
+    finding = result["vulnerabilities"][0]
+    assert finding["file"] == "web/app.js"
+    assert finding["language"] == "javascript"
+    assert finding["test_id"] == "js-eval"
+    assert finding["reachability"] == "unknown"

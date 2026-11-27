@@ -23,6 +23,7 @@ MAX_ARCHIVE_ENTRIES = 2000              # files + folders inside the archive
 MAX_PY_FILES = 200                      # Python files we are willing to scan
 MAX_PY_FILE_BYTES = 1 * 1024 * 1024     # size of one extracted .py file
 MAX_TOTAL_BYTES = 20 * 1024 * 1024      # total extracted size
+SOURCE_SUFFIXES = (".py", ".js", ".jsx", ".mjs", ".cjs")    #Source files we extract (the function keeps its old name for compatibility)
 
 # Folders that contain third-party or generated code, not the user's own code.
 SKIP_DIRS = {
@@ -148,8 +149,12 @@ def extract_python_files(zip_path, dest_dir) -> ExtractionResult:
                 if any(p in SKIP_DIRS for p in parts[:-1]):
                     result.skipped.append({"name": name, "reason": "ignored folder"})
                     continue
-                if not parts[-1].lower().endswith(".py"):
-                    result.skipped.append({"name": name, "reason": "not a Python file"})
+                lowered = parts[-1].lower()
+                if not lowered.endswith(SOURCE_SUFFIXES):
+                    result.skipped.append({"name": name, "reason": "not a supported source file"})
+                    continue
+                if lowered.endswith(".min.js"):
+                    result.skipped.append({"name": name, "reason": "minified file"})
                     continue
                 if _has_reserved_windows_name(parts):
                     result.skipped.append({"name": name, "reason": "reserved Windows name"})

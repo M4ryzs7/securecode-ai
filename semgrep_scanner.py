@@ -109,7 +109,7 @@ def parse_semgrep(report: dict, name_for, short_ids: bool = False) -> list:
         findings.append(make_finding(
             language="javascript",
             tool="semgrep",
-            type=check_id.rsplit(".", 1)[-1],
+            type=metadata.get("title") or check_id.rsplit(".", 1)[-1],
             test_id=rule_id,
             severity=_SEVERITY_MAP.get(str(extra.get("severity", "")).upper(), "UNKNOWN"),
             confidence=str(metadata.get("confidence", "MEDIUM")).upper(),
@@ -122,6 +122,12 @@ def parse_semgrep(report: dict, name_for, short_ids: bool = False) -> list:
         ))
     return sort_and_number(findings)
 
+def parse_semgrep_errors(report: dict, name_for) -> list:
+    return [
+        {"file": name_for(e.get("path", "")),
+         "reason": e.get("message") or e.get("long_msg") or "unknown error"}
+        for e in report.get("errors", [])
+    ]
 
 def scan_js_file(file_path: str, display_name: str = None,
                  config: str = DEFAULT_CONFIG) -> dict:
