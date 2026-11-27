@@ -185,8 +185,11 @@ def test_prompt_cannot_be_broken_out_of_by_scanned_code():
 
 
 def test_prompt_truncates_huge_snippets():
-    prompt = build_prompt(finding(code="x" * 100000))
-    assert len(prompt) < 3000
+    from analyzer import MAX_SNIPPET_CHARS
+
+    base = build_prompt(finding(code=""))
+    huge = build_prompt(finding(code="x" * 100000))
+    assert len(huge) - len(base) <= MAX_SNIPPET_CHARS
 
 
 def test_parse_accepts_json_wrapped_in_text():
