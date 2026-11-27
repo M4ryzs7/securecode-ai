@@ -98,7 +98,7 @@ Run it with `python evaluate_ai.py`. Use the `OLLAMA_MODEL` environment variable
 **How to read this:**
 
 - `qwen2.5:1.5b` answers every finding, but it trusts the scanner too much. It called all four `shell=True` findings likely true positives, including the one labeled as a false positive, and it missed two real findings (an SQL-construction finding and a missing-timeout finding). It did correctly dismiss four import-only findings.
-- `qwen2.5:7b` found the SQL-construction finding and made no false-negative errors, but it answered "uncertain" for five findings, including all four import-only false positives, and it never classified a finding as a likely false positive. One of its rejected-or-wrong outputs shows a limitation worth knowing: for a `shell=True` call that ran a constant command, its explanation said the case was safe while its triage still said likely true positive.
+- `qwen2.5:7b` found the SQL-construction finding and made no false-negative errors, but it answered "uncertain" for five findings, including all four import-only false positives, and it never classified a finding as a likely false positive. One of its answers shows a limitation worth knowing: for a `shell=True` call that ran a constant command, the explanation said the case was safe while the triage still said likely true positive.
 - 21 findings from 4 projects is a small sample, so a single decision moves the scores noticeably. Labels come from one person, each model was run once, and model output can vary between runs.
 - The benchmark covers Python and Bandit only. **AI triage has not been evaluated on JavaScript findings.**
 
