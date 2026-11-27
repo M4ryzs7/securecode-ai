@@ -49,15 +49,18 @@ with st.sidebar:
 
     st.divider()
     st.caption(
-        "Limits: 10 MB upload, 200 Python files per ZIP, 1 MB per file. "
+        "Limits: 10 MB upload, 200 source files per ZIP, 1 MB per file. "
         "Uploaded code is analyzed, never executed."
     )
 
 # --------------------------------------------------------------------- main
 st.title("🛡️ SecureCode AI")
-st.write("Static analysis (Bandit) + curated remediation guidance + local AI explanations.")
+st.write("Static analysis (Bandit for Python, Semgrep for JavaScript) + curated remediation guidance + local AI explanations.")
 
-uploaded = st.file_uploader("Upload a Python file or a ZIP of a Python project", type=["py", "zip"])
+uploaded = st.file_uploader(
+    "Upload a Python or JavaScript file, or a ZIP of a project",
+    type=["py", "js", "jsx", "mjs", "cjs", "zip"],
+)
 
 if uploaded is not None:
     st.success(f"Selected: {clean(uploaded.name)} ({uploaded.size / 1024:.1f} KB)")
@@ -72,7 +75,7 @@ if uploaded is not None:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(uploaded.getvalue())
                     temp_path = tmp.name
-                with st.spinner("Scanning with Bandit..."):
+                with st.spinner("Scanning..."):
                     result = scan_upload(temp_path, uploaded.name)
             finally:
                 if temp_path and os.path.exists(temp_path):
