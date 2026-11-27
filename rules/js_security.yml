@@ -1,0 +1,43 @@
+rules:
+  - id: js-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval() runs a string as JavaScript code.
+    patterns:
+      - pattern: eval(...)
+      - pattern-not: eval("...")
+    metadata:
+      cwe: ["CWE-95: Eval Injection"]
+      confidence: MEDIUM
+      references: ["https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval"]
+
+  - id: js-new-function
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: The Function constructor builds code from a string, like eval().
+    patterns:
+      - pattern: new Function(...)
+      - pattern-not: new Function("...")
+    metadata:
+      cwe: ["CWE-95: Eval Injection"]
+      confidence: MEDIUM
+
+  - id: js-innerhtml
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Assigning to innerHTML parses a string as HTML, which may allow cross-site scripting if the value is not trusted.
+    patterns:
+      - pattern: $EL.innerHTML = $VALUE
+      - pattern-not: $EL.innerHTML = "..."
+    metadata:
+      cwe: ["CWE-79: Cross-site Scripting"]
+      confidence: MEDIUM
+
+  - id: js-document-write
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: document.write() inserts a string into the page as HTML, which may allow cross-site scripting if the value is not trusted.
+    pattern: document.write(...)
+    metadata:
+      cwe: ["CWE-79: Cross-site Scripting"]
+      confidence: LOW

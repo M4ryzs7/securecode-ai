@@ -17,7 +17,8 @@ from findings import make_finding, sort_and_number
 JS_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs"}
 MAX_FILE_BYTES = 1 * 1024 * 1024
 SEMGREP_TIMEOUT_SECONDS = 180
-DEFAULT_CONFIG = "p/javascript"   # downloads rules; vendor them later for fully offline use
+RULES_FILE = Path(__file__).parent / "rules" / "js_security.yml"
+DEFAULT_CONFIG = str(RULES_FILE)
 SNIPPET_CONTEXT_LINES = 2
 
 _SEVERITY_MAP = {"ERROR": "HIGH", "WARNING": "MEDIUM", "INFO": "LOW"}
@@ -33,14 +34,20 @@ def run_semgrep(target: Path, config: str = DEFAULT_CONFIG) -> dict:
     if exe is None:
         return {"ok": False, "error": "Semgrep is not installed. Run: pip install semgrep"}
 
+    configs = config if isinstance(config, (list, tuple)) else [config]
+
     command = [
         exe, "scan",
-        "--config", config,
         "--json", "--quiet",
-        "--metrics=off",            # no usage data sent to Semgrep
+        "--metrics=off",
         "--disable-version-check",
-        str(target),
     ]
+
+    for cfg in configs:
+        command.extend(["--config", cfg])
+
+    command.append(str(target))
+
     env = {**os.environ, "PYTHONUTF8": "1"}
 
     try:
@@ -87,13 +94,14 @@ def _cwe(metadata: dict) -> str:
     return match.group(0) if match else ""
 
 
-def parse_semgrep(report: dict, name_for) -> list:
+def parse_semgrep(report: dict, name_for, short_ids: bool = False) -> list:
     """Convert Semgrep's JSON into our finding dicts."""
     findings = []
     for result in report.get("results", []):
         extra = result.get("extra") or {}
         metadata = extra.get("metadata") or {}
         check_id = result.get("check_id", "unknown")
+        rule_id = check_id.rsplit(".", 1)[-1] if short_ids else check_id
         start = (result.get("start") or {}).get("line")
         end = (result.get("end") or {}).get("line")
         references = metadata.get("references")
@@ -102,7 +110,7 @@ def parse_semgrep(report: dict, name_for) -> list:
             language="javascript",
             tool="semgrep",
             type=check_id.rsplit(".", 1)[-1],
-            test_id=check_id,
+            test_id=rule_id,
             severity=_SEVERITY_MAP.get(str(extra.get("severity", "")).upper(), "UNKNOWN"),
             confidence=str(metadata.get("confidence", "MEDIUM")).upper(),
             line=start,
@@ -136,7 +144,8 @@ def scan_js_file(file_path: str, display_name: str = None,
             return _error(outcome["error"])
 
         report = outcome["report"]
-        findings = parse_semgrep(report, lambda _p: shown_name)
+        findings = parse_semgrep(report, lambda _p: shown_name,
+                                short_ids=Path(config).is_file())
         scan_errors = [
             {"file": shown_name,
              "reason": e.get("message") or e.get("long_msg") or "unknown error"}

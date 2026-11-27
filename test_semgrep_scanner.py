@@ -43,3 +43,9 @@ def test_scan_js_file_finds_eval(tmp_path):
     assert result["status"] == "success"
     assert result["total_issues"] >= 1
     assert all(f["language"] == "javascript" for f in result["vulnerabilities"])
+
+def test_local_rule_ids_lose_path_prefix():
+    report = {"results": [{**FAKE_REPORT["results"][0], "check_id": "rules.js-eval"}],
+              "errors": []}
+    finding = parse_semgrep(report, lambda _p: "x.js", short_ids=True)[0]
+    assert finding["test_id"] == "js-eval"
