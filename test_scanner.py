@@ -236,3 +236,19 @@ def test_scan_zip_includes_reachability_results(tmp_path):
     assert finding["sink"]["name"] == "eval"
     assert finding["source"]["name"] == "request.args.get"
     assert finding["file"] == "app.py"
+
+def test_scan_upload_routes_js_files(monkeypatch):
+    import scanner
+
+    calls = []
+
+    def fake_scan_js_file(path, display_name=None):
+        calls.append((path, display_name))
+        return {"status": "success"}
+
+    monkeypatch.setattr(scanner, "scan_js_file", fake_scan_js_file)
+
+    result = scanner.scan_upload("tmp123.js", "app.js")
+
+    assert result["status"] == "success"
+    assert calls == [("tmp123.js", "app.js")]

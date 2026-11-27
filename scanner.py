@@ -14,11 +14,13 @@ import json
 import subprocess
 import sys
 import tempfile
+
 from pathlib import Path
 
 from safe_zip import ZipSecurityError, extract_python_files
 from reachability import analyze_reachability
 from findings import make_finding, sort_and_number
+from semgrep_scanner import JS_SUFFIXES, scan_js_file
 
 MAX_FILE_BYTES = 1 * 1024 * 1024
 BANDIT_TIMEOUT_SECONDS = 120
@@ -321,10 +323,14 @@ def validate_fix_code(fixed_code: str, original_test_id: str) -> dict:
 
 
 def scan_upload(file_path: str, original_name: str) -> dict:
-    """Scan an uploaded .py or .zip file, reporting the user's original file name."""
+    """Scan an uploaded .py, .js or .zip file, reporting the user's original file name."""
     suffix = Path(original_name).suffix.lower()
     if suffix == ".py":
         return scan_file(file_path, display_name=original_name)
+    if suffix in JS_SUFFIXES:
+        return scan_js_file(file_path, display_name=original_name)
     if suffix == ".zip":
         return scan_zip(file_path, display_name=original_name)
-    return _error("Unsupported file type. Upload a .py file or a .zip of Python files.")
+    return _error(
+        "Unsupported file type. Upload a .py or .js file, or a .zip of Python files."
+    )

@@ -394,6 +394,8 @@ def _base_analysis(finding: dict) -> dict:
     )
     return {
         # --- from static analysis (authoritative) ---
+        "language": finding.get("language", "python"),
+        "tool": finding.get("tool", "bandit"),
         "id": finding.get("id", ""),
         "file": finding.get("file", ""),
         "test_id": finding.get("test_id", ""),
