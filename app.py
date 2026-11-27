@@ -92,13 +92,13 @@ def render_finding(finding: dict, item: dict | None):
              f"{clean(finding['file'])}:{finding['line']}")
 
     with st.expander(label):
-        st.markdown("#### Bandit result")
+        st.markdown(f"#### {finding.get('tool', 'bandit').capitalize()} result")
         st.text(f"Severity: {finding['severity']}   Confidence: {finding['confidence']}"
                 + (f"   {finding['cwe']}" if finding.get("cwe") else ""))
         st.text(finding["description"])
         st.code(finding["code"], language="python")
         if str(finding.get("more_info", "")).startswith("https://"):
-            st.markdown(f"[Bandit documentation]({finding['more_info']})")
+            st.markdown(f"[Documentation]({finding['more_info']})")
 
         if item is None:
             return
@@ -269,7 +269,7 @@ if "scan_result" in st.session_state:
                                file_name="securecode_report.json", mime="application/json")
 
         st.warning(
-            "Bandit flags risky code patterns; it cannot tell whether data is attacker-controlled. "
+            "Static analysis flags risky code patterns; it cannot tell whether data is attacker-controlled. "
             "Curated guidance is hand-written; AI text comes from a small local model and is unverified. "
             "Review and test any change yourself. Nothing is applied to your code automatically."
         )
