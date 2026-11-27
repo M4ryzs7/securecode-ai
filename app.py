@@ -106,14 +106,21 @@ def render_finding(finding: dict, item: dict | None):
         st.markdown("#### Guidance")
         st.markdown(f"**{item['category_label']}**")
         if not item["curated"]:
-            st.caption("No curated rule exists for this test ID; showing Bandit's own text only.")
+            st.caption("No curated rule exists for this test ID; showing the scanner's own text only.")
         st.markdown(f"**What it means:** {item['explanation']}")
         st.markdown(f"**Potential impact:** {item['impact']}")
         st.markdown(f"**Recommendation:** {item['recommendation']}")
         for note in item["notes"]:
            st.info(note)
 
-        if item["fixed_code"]:
+        if item["fixed_code"] and item.get("language") == "javascript":
+            st.markdown("#### Suggested Fix")
+            st.caption(
+                "Hand-written example. It is not machine-validated, is not a verified "
+                "patch for your project and is never applied automatically."
+            )
+            st.code(item["fixed_code"], language="javascript")
+        elif item["fixed_code"]:
             validation = validate_fix_code(
                 item["fixed_code"],
                 item["test_id"]
@@ -158,7 +165,7 @@ def render_finding(finding: dict, item: dict | None):
 
             st.caption(
                 "AI assessment is advisory and unverified. "
-                "It does not change or remove Bandit findings."
+                "It does not change or remove static-analysis findings."
             )
 
         elif item["ai_note"]:
@@ -189,6 +196,8 @@ if "scan_result" in st.session_state:
         st.subheader("🔗 Reachability Analysis")
 
         reachability_results = result.get("reachability", [])
+        has_js = any(f.get("language") == "javascript"
+                     for f in result.get("vulnerabilities", []))
 
         if reachability_results:
             for entry in reachability_results:
@@ -213,21 +222,30 @@ if "scan_result" in st.session_state:
                 "Reachability indicates a possible code path. "
                 "It does not prove that a vulnerability is exploitable."
             )
+            if has_js:
+                st.caption("JavaScript findings are not included in reachability analysis.")
         else:
-            st.info("No Flask routes with reachable sinks detected.")
+            if has_js:
+                st.info(
+                    "Reachability analysis is only available for Python (Flask) code. "
+                    "JavaScript findings are not analyzed for reachability. "
+                    "This does not mean the code is safe."
+                )
+            else:
+                st.info("No Flask routes with reachable sinks detected.")
 
         if result.get("skipped_files"):
             with st.expander(f"Skipped files ({len(result['skipped_files'])})"):
                 for entry in result["skipped_files"][:100]:
                     st.text(f"{entry['name']}: {entry['reason']}")
         if result.get("scan_errors"):
-            with st.expander(f"⚠️ Files Bandit could not analyze ({len(result['scan_errors'])})"):
+            with st.expander(f"⚠️ Files the scanner could not analyze ({len(result['scan_errors'])})"):
                 for entry in result["scan_errors"]:
                     st.text(f"{entry['file']}: {entry['reason']}")
 
         if not findings:
-            st.success("No Bandit findings. This does not prove the code is secure: "
-                       "Bandit only detects known risky patterns.")
+            st.success("No findings. This does not prove the code is secure: "
+                       "static analysis only detects known risky patterns.")
         else:
             if st.button("🤖 Get guidance and AI explanations"):
                 bar = st.progress(0.0, text="Preparing guidance...")
