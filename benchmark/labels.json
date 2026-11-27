@@ -1,0 +1,170 @@
+[
+  {
+    "project": "vuln_app_1",
+    "file": "vulnerable_sample.py",
+    "line": 1,
+    "test_id": "B404",
+    "label": "FP",
+    "note": "import only, not a vulnerability"
+  },
+  {
+    "project": "vuln_app_1",
+    "file": "vulnerable_sample.py",
+    "line": 3,
+    "test_id": "B105",
+    "label": "TP",
+    "note": "hardcoded password in source"
+  },
+  {
+    "project": "vuln_app_1",
+    "file": "vulnerable_sample.py",
+    "line": 6,
+    "test_id": "B307",
+    "label": "TP",
+    "note": "eval on a function parameter, attacker-controlled"
+  },
+  {
+    "project": "vuln_app_1",
+    "file": "vulnerable_sample.py",
+    "line": 9,
+    "test_id": "B602",
+    "label": "TP",
+    "note": "shell=True with a variable command"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 2,
+    "test_id": "B404",
+    "label": "FP",
+    "note": "import only, not a vulnerability"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 20,
+    "test_id": "B608",
+    "label": "TP",
+    "note": "SQL injection, route param name concatenated into query"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 58,
+    "test_id": "B602",
+    "label": "TP",
+    "note": "command injection, hostname from user input concatenated into shell command"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 68,
+    "test_id": "B602",
+    "label": "FP",
+    "note": "constant hostname, no user input"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 88,
+    "test_id": "B403",
+    "label": "FP",
+    "note": "import only, not a vulnerability"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 89,
+    "test_id": "B104",
+    "label": "TP",
+    "note": "socket server binds to all network interfaces using 0.0.0.0"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 97,
+    "test_id": "B301",
+    "label": "TP",
+    "note": "pickle.loads on data received from socket, remote code execution"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 119,
+    "test_id": "B602",
+    "label": "TP",
+    "note": "command injection, filename from user input concatenated into shell command"
+  },
+  {
+    "project": "vuln_app_2",
+    "file": "vulnerable-flask-app-linux.py",
+    "line": 228,
+    "test_id": "B104",
+    "label": "TP",
+    "note": "Flask application binds to all network interfaces using 0.0.0.0"
+  },
+  {
+    "project": "vuln_app_3",
+    "file": "app.py",
+    "line": 11,
+    "test_id": "B105",
+    "label": "TP",
+    "note": "hardcoded Flask secret key; should use a secure environment variable"
+  },
+  {
+    "project": "vuln_app_3",
+    "file": "routes/account.py",
+    "line": 1,
+    "test_id": "B403",
+    "label": "FP",
+    "note": "import only; no unsafe pickle.loads usage shown at this line"
+  },
+  {
+    "project": "vuln_app_3",
+    "file": "routes/account.py",
+    "line": 118,
+    "test_id": "B301",
+    "label": "TP",
+    "note": "untrusted preference data is deserialized with pickle.loads; potential arbitrary code execution"
+  },
+  {
+    "project": "vuln_app_3",
+    "file": "routes/signup.py",
+    "line": 16,
+    "test_id": "B608",
+    "label": "TP",
+    "note": "user-controlled code value is interpolated directly into SQL query; use parameterized queries"
+  },
+  {
+    "project": "vuln_app_3",
+    "file": "utils/profile_image.py",
+    "line": 7,
+    "test_id": "B310",
+    "label": "TP",
+    "note": "URL is opened without scheme or host validation; restrict allowed schemes and validate destinations"
+  },
+  {
+    "project": "vuln_app_4",
+    "file": "app.py",
+    "line": 4,
+    "test_id": "B105",
+    "label": "TP",
+    "note": "hardcoded Flask SECRET_KEY exposed in source code; use a strong random secret from an environment variable"
+  },
+  {
+    "project": "vuln_app_4",
+    "file": "app.py",
+    "line": 9,
+    "test_id": "B201",
+    "label": "TP",
+    "note": "Flask debug mode is enabled; exposes the Werkzeug debugger and may allow arbitrary code execution"
+  },
+  {
+    "project": "vuln_app_4",
+    "file": "routes.py",
+    "line": 27,
+    "test_id": "B113",
+    "label": "TP",
+    "note": "external HTTP request has no timeout; a slow or unresponsive server can tie up application resources"
+  }
+]

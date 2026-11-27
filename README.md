@@ -1,90 +1,106 @@
 # 🛡️ SecureCode AI
 
-**AI-Assisted Python Code Security Scanner**
+**AI-Assisted Python and JavaScript Code Security Scanner**
 
-SecureCode AI is a local AI-assisted security analysis tool that scans individual Python source files and Python project ZIP archives to identify potentially risky coding patterns.
+SecureCode AI is a local, AI-assisted security analysis tool. It scans individual source files and project ZIP archives to find potentially risky coding patterns, explains them, and suggests how to fix them.
 
-It combines **Bandit static analysis**, a curated security remediation knowledge base, a custom Flask Reachability Analysis module, and a locally running **Qwen 2.5 1.5B** language model through Ollama.
+It combines **Bandit** (Python) and **Semgrep** (JavaScript) static analysis, a curated remediation knowledge base, a Flask reachability analysis module, and a locally running **Qwen 2.5 1.5B** language model through Ollama. Uploaded code is only analyzed, never executed, and nothing is sent to an external AI service.
 
-The project helps developers identify potential security issues, understand their implications, and receive evidence-based explanations and remediation guidance.
+![Scan results](docs/scan-results.png)
 
 ## ✨ Features
 
-- **Python File Scanning:** Scan individual Python files.
-- **ZIP Project Scanning:** Upload and scan Python projects contained in ZIP archives.
-- **Static Security Analysis:** Uses Bandit to identify potentially insecure coding patterns.
-- **Flask Reachability Analysis:** Discovers supported Flask routes and analyzes reachable functions for selected dangerous operations.
-- **Source and Sink Detection:** Identifies selected user-input sources and dangerous sinks, including `request.args.get`, `eval`, and certain command-execution calls.
-- **Call Graph Analysis:** Tracks direct function calls and analyzes reachable functions from discovered Flask routes.
-- **AI-Powered Explanations:** Generates additional explanations using a local Ollama model.
-- **AI Security Triage:** Classifies findings as likely true positive, likely false positive, or uncertain.
-- **Evidence-Based Validation:** Rejects certain AI responses that contain unsupported security claims or contradict explicit code evidence.
-- **Curated Remediation Guidance:** Provides predefined explanations, potential impacts, recommendations, and illustrative examples.
-- **Suggested Fix Validation:** Checks suggested code snippets using Python AST parsing and Bandit scanning before displaying them.
-- **Severity Classification:** Preserves Bandit's HIGH, MEDIUM, and LOW severity classifications.
-- **Security Reports:** Exports scan results in Markdown and JSON formats, including Reachability Analysis results.
-- **Safe ZIP Processing:** Applies archive validation and extraction limits.
-- **Local AI Processing:** Uses Ollama locally rather than an external AI API.
-- **Automated Testing:** Includes a pytest test suite and GitHub Actions CI workflow.
+- **Python and JavaScript scanning:** Upload a `.py` file, a `.js`/`.jsx`/`.mjs`/`.cjs` file, or a ZIP containing both.
+- **Static analysis:** Bandit for Python, Semgrep with a small set of local rules for JavaScript.
+- **One finding format:** Both scanners produce the same finding structure, so the guidance, AI and report layers work the same way for every language.
+- **Flask reachability analysis (Python):** Finds supported Flask routes and checks which dangerous sinks they can reach.
+- **Curated remediation guidance:** Hand-written explanations, impact statements, recommendations and example fixes.
+- **AI triage and explanations:** A local model classifies each finding as likely true positive, likely false positive, or uncertain, and explains it.
+- **Validation of AI output:** Responses are checked against a JSON schema and rejected when they overclaim, give fix advice, or contradict the code.
+- **Suggested-fix validation (Python):** Example fixes are checked with AST parsing and Bandit before they are shown.
+- **Reports:** Export results as Markdown or JSON.
+- **Safe ZIP processing:** Path traversal, symlinks, zip bombs and oversized files are rejected or skipped.
+- **Local processing:** The model runs through Ollama on your machine.
+- **Automated tests:** A pytest suite and a GitHub Actions workflow.
+
+## 🌐 Language support
+
+| | Python | JavaScript |
+|---|---|---|
+| Scanner | Bandit | Semgrep with local rules (`rules/js_security.yml`) |
+| Reachability analysis | Flask routes (prototype) | Not available |
+| Curated guidance | Bandit test IDs | 4 rules: `eval()`, `new Function()`, `innerHTML` assignment, `document.write()` |
+| Example fixes | Machine-checked (AST + Bandit) | Hand-written, **not** machine-validated |
+
+JavaScript findings are reported with reachability `unknown`, which means "not analyzed", not "safe".
+
+## 🖼️ Screenshots
+
+| Guidance and suggested fix | AI assessment |
+|---|---|
+| ![Guidance and suggested fix](docs/guidance-fix.png) | ![AI assessment](docs/ai-assessment.png) |
 
 ## 🏗️ Architecture
 
-The application follows this general workflow:
+1. The user uploads a source file or a ZIP archive.
+2. The application validates the upload. ZIP files are extracted safely, and only supported source files are written to disk.
+3. Python files are analyzed by Bandit, JavaScript files by Semgrep. Nothing is executed.
+4. Python files are also passed to the reachability module.
+5. Findings from both scanners are merged into one list, sorted by severity, and given stable IDs (`F001`, `F002`, ...).
+6. The remediation knowledge base adds curated guidance for each finding.
+7. The local LLM produces a structured triage and explanation for the most severe findings.
+8. AI responses are validated before they are accepted.
+9. Python example fixes are validated separately.
+10. Results are shown in the Streamlit dashboard and can be exported.
 
-1. The user uploads a Python file or ZIP archive.
-2. The application validates the uploaded content.
-3. Bandit performs static security analysis without executing the uploaded source code.
-4. For Python files, the Reachability Analysis module examines supported Flask routes, function call relationships, selected input sources, and dangerous sinks.
-5. For ZIP archives, the application safely extracts eligible Python files and aggregates their Reachability Analysis results.
-6. Findings are collected and classified.
-7. The remediation knowledge base provides curated security guidance.
-8. The local LLM generates structured explanations and triage assessments.
-9. AI responses are validated before being accepted.
-10. Suggested fixes undergo separate syntax and Bandit checks.
-11. Results are displayed in the Streamlit dashboard.
-12. Users can download Markdown or JSON reports.
+Scanner output is the only source of truth for a finding's ID, file, rule, severity, confidence and line. The AI never creates or changes these values.
 
-### Reachability Analysis
+### Reachability analysis (Python only)
 
-The Reachability Analysis module uses Python AST parsing to inspect source code without executing it.
+The module uses Python AST parsing to inspect source code without executing it. It can:
 
-Its current capabilities include:
+- Discover supported Flask routes (`@app.route` and selected HTTP method decorators).
+- Build a call graph from direct function calls and traverse it from each route handler.
+- Detect selected dangerous sinks (such as `eval`, `exec` and certain command-execution calls) and selected user-input sources (such as `request.args.get`).
+- Track simple variable aliases in supported cases.
 
-- Discovering supported Flask routes using decorators such as `@app.route` and selected HTTP method decorators.
-- Building a call graph from direct function calls.
-- Traversing reachable functions from discovered route handlers.
-- Detecting selected dangerous sinks, such as `eval`, `exec`, and certain command-execution calls.
-- Detecting selected user-input sources, including `request.args.get`.
-- Tracking simple variable aliases in supported cases.
-- Associating detected sources and sinks with their routes and source files.
+Reachability analysis is a prototype, not a full taint-analysis engine. It does not cover all Flask routing patterns, cross-file data flows, complex aliases or dynamic dispatch. A reachable sink does not prove exploitability, and a missing result does not prove safety. Reachability is used for ranking only and never hides a finding.
 
-**Important limitations:**
+### LLM reliability
 
-Reachability Analysis is a prototype, not a comprehensive taint-analysis engine. It does not cover all Flask routing patterns, cross-file data flows, complex aliases, dynamic dispatch, or every possible source and sink. A reachable dangerous sink does not by itself prove exploitability. Missing results do not prove that an application is safe.
-
-### LLM Reliability
-
-The AI analysis layer includes several reliability mechanisms:
-
-- Structured JSON responses validated against a JSON Schema.
+- Structured JSON responses validated against a JSON schema.
 - Restricted triage categories.
-- Prompt instructions requiring evidence-based explanations.
-- Validation against unsupported security claims.
-- Explicit evidence consistency checks for certain code contradictions.
-- Rejection of invalid or inconsistent AI responses.
+- Prompts that require evidence-based, cautious language.
+- Rejection of unsupported claims (for example "guaranteed" or "remote code execution").
+- Rejection of responses that give fix advice, since curated guidance provides fixes.
+- Consistency checks for explicit contradictions, such as the wrong `shell=` value.
 
-AI-generated assessments remain advisory and do not modify Bandit's original findings, severity, or confidence.
+AI assessments are advisory and never change the scanner's findings, severity or confidence.
 
-### Suggested Fix Validation
+### Suggested-fix validation
 
-Suggested fixes are checked using:
+Python example fixes are checked with AST parsing and Bandit: the original finding must disappear and no new HIGH or MEDIUM finding may appear. This is performed on an isolated snippet, so passing it does not prove that a fix is correct for a whole application. JavaScript examples are hand-written and are labeled as not machine-validated. Fixes are never applied automatically.
 
-- Python AST parsing for syntax validation.
-- Bandit scanning of the proposed snippet.
-- Checks for persistence of the original finding.
-- Checks for newly introduced HIGH or MEDIUM findings.
+## 📊 Benchmark (AI triage, Python)
 
-Validation is performed on an isolated snippet. Passing these checks does not prove that the proposed fix is safe or correct in the complete application. Fixes are never automatically applied.
+The AI triage was measured against findings that were labeled by hand as true or false positives.
+
+- **Data:** 21 Bandit findings from 4 intentionally vulnerable Python projects: three open-source Flask apps and this project's own vulnerable sample (see [`benchmark/README.md`](benchmark/README.md))
+- **Labels:** assigned by one person (the author)
+
+| Model | Answered | Uncertain | Rejected | TP | FP | FN | TN | Precision | Recall | F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `qwen2.5:1.5b` (default) | 21 / 21 | 0 | 0 | 14 | 1 | 2 | 4 | 0.933 | 0.875 | 0.903 |
+| `qwen2.5:7b` | 15 / 21 | 5 | 1 | 14 | 1 | 0 | 0 | 0.933 | 1.000 | 0.966 |
+
+Run it with `python evaluate_ai.py`. Use the `OLLAMA_MODEL` environment variable to choose the model. Precision, recall and F1 are computed only on the findings a model answered ("uncertain" and rejected outputs are excluded), so read them together with the "Answered" column.
+
+**How to read this:**
+
+- `qwen2.5:1.5b` answers every finding, but it trusts the scanner too much. It called all four `shell=True` findings likely true positives, including the one labeled as a false positive, and it missed two real findings (an SQL-construction finding and a missing-timeout finding). It did correctly dismiss four import-only findings.
+- `qwen2.5:7b` found the SQL-construction finding and made no false-negative errors, but it answered "uncertain" for five findings, including all four import-only false positives, and it never classified a finding as a likely false positive. One of its rejected-or-wrong outputs shows a limitation worth knowing: for a `shell=True` call that ran a constant command, its explanation said the case was safe while its triage still said likely true positive.
+- 21 findings from 4 projects is a small sample, so a single decision moves the scores noticeably. Labels come from one person, each model was run once, and model output can vary between runs.
+- The benchmark covers Python and Bandit only. **AI triage has not been evaluated on JavaScript findings.**
 
 ## 🧰 Technologies Used
 
@@ -93,49 +109,45 @@ Validation is performed on an isolated snippet. Passing these checks does not pr
 | Python | Main programming language |
 | Streamlit | Interactive web interface |
 | Bandit | Static Python security analysis |
-| Python AST | Source-code and reachability analysis |
+| Semgrep | Static JavaScript security analysis |
+| Python AST | Reachability analysis and fix validation |
 | Ollama | Local LLM execution |
-| Qwen 2.5 1.5B | AI-generated explanations |
-| Requests | Communication with the Ollama API |
+| Qwen 2.5 1.5B | AI explanations and triage |
 | Pytest | Automated testing |
-| GitHub Actions | Continuous Integration |
+| GitHub Actions | Continuous integration |
 
 ## 📁 Project Structure
 
 ```text
 securecode-ai/
 │
-├── .github/
-│   └── workflows/
-│       └── tests.yml
+├── .github/workflows/tests.yml     CI workflow
+├── .streamlit/config.toml
 │
-├── .streamlit/
-│   └── config.toml
+├── app.py                          Streamlit dashboard
+├── scanner.py                      Bandit scanning, file/ZIP routing
+├── semgrep_scanner.py              Semgrep scanning (JavaScript)
+├── findings.py                     Shared finding format
+├── reachability.py                 Flask reachability analysis
+├── analyzer.py                     Guidance + AI triage and validation
+├── remediation_kb.py               Curated guidance (Bandit IDs + JS rules)
+├── ollama_client.py                Ollama API client
+├── safe_zip.py                     Safe ZIP extraction
+├── report.py                       Markdown / JSON reports
 │
-├── evaluation/
-│   ├── cases.json
-│   └── run_evaluation.py
+├── rules/js_security.yml           Local Semgrep rules
+├── samples/js_sample.js            JavaScript example for manual testing
+├── docs/                           Screenshots
 │
-├── app.py
-├── scanner.py
-├── reachability.py
-├── analyzer.py
-├── remediation_kb.py
-├── ollama_client.py
-├── safe_zip.py
-├── report.py
+├── benchmark/                      Hand-made labels and results
+├── evaluate_ai.py                  AI triage benchmark
+├── evaluate_benchmark.py           Benchmark helper
+├── label_findings.py               Helper for labeling findings
+├── evaluation/                     Earlier prompt-level evaluation
 │
 ├── requirements.txt
-├── vulnerable_sample.py
 ├── smoke_test.py
-│
-├── test_analyzer.py
-├── test_ollama.py
-├── test_remediation_kb.py
-├── test_report.py
-├── test_scanner.py
-├── test_reachability.py
-└── test_zip_scanner.py
+└── test_*.py                       Test suite
 ```
 
 ## ⚙️ Installation and Setup
@@ -146,6 +158,8 @@ securecode-ai/
 - [Ollama](https://ollama.com/)
 - Git
 
+Semgrep (used for JavaScript) is installed with the project requirements. Semgrep Community Edition runs natively on Windows, macOS and Linux.
+
 ### 1. Clone the repository
 
 ```bash
@@ -153,27 +167,22 @@ git clone https://github.com/M4ryzs7/securecode-ai.git
 cd securecode-ai
 ```
 
-### 2. Create a virtual environment
-
-```bash
-python -m venv .venv
-```
-
-Activate it:
+### 2. Create a virtual environment and install dependencies
 
 **Windows PowerShell:**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
-
-The commands below can be run without activating the virtual environment.
 
 **macOS/Linux:**
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Install the local AI model
@@ -182,33 +191,17 @@ pip install -r requirements.txt
 ollama pull qwen2.5:1.5b
 ```
 
-Make sure Ollama is running before starting AI-powered analysis.
+Make sure Ollama is running before you request AI explanations. The scanner and the curated guidance work without it.
 
 ### 4. Run the application
 
-**Windows PowerShell:**
-
-```powershell
-.\.venv\Scripts\python.exe -m streamlit run app.py
-```
-
-**macOS/Linux:**
-
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
-The application is usually available at:
-
-```text
-http://localhost:8501
-```
+The application is usually available at `http://localhost:8501`.
 
 ## 🔧 Ollama Configuration
-
-SecureCode AI supports environment-based Ollama configuration.
-
-Default settings:
 
 | Variable | Default |
 |---|---|
@@ -222,116 +215,60 @@ $env:OLLAMA_MODEL = "qwen2.5:1.5b"
 $env:OLLAMA_BASE_URL = "http://localhost:11434"
 ```
 
-These variables allow users to select an installed Ollama model and configure the Ollama server URL without modifying the source code.
-
 ## 🚀 How to Use
 
 1. Open SecureCode AI in your browser.
-2. Upload a Python `.py` file or a ZIP archive.
-3. Start the scan.
-4. Review detected findings, severity levels, affected files, and line numbers.
-5. Review the Reachability Analysis section, when supported results are detected.
-6. Review available curated remediation guidance.
-7. Request AI explanations and triage assessments when Ollama is available.
-8. Review suggested fixes when available.
-9. Download the results as Markdown or JSON reports.
+2. Upload a Python or JavaScript file, or a ZIP archive of a project.
+3. Click **Scan**.
+4. Review the findings, their severity, file and line.
+5. For Python code, review the reachability analysis.
+6. Click **Get guidance and AI explanations** to see curated guidance, suggested fixes and the AI assessment.
+7. Download the results as a Markdown or JSON report.
+
+To try JavaScript scanning, upload `samples/js_sample.js`.
 
 ## 🧪 Running Tests
-
-Run the complete automated test suite:
 
 ```bash
 python -m pytest -q
 ```
 
-**Current verified test status: 173 passed.**
+**Current verified test status: 188 passed.**
 
-For a local integration check with Ollama:
+Tests that need a running Semgrep installation are skipped when it is not available. For a local integration check with Ollama:
 
 ```bash
 python smoke_test.py
 ```
 
-The integration check requires a running Ollama server and the configured model.
-
-## 📊 LLM Evaluation
-
-The project includes an evaluation framework with 10 predefined security-analysis cases.
-
-Run the evaluation:
-
-```bash
-python evaluation/run_evaluation.py
-```
-
-The evaluation measures structured response validity, evidence consistency, and triage accuracy.
-
-### Current Evaluation Results
-
-Model: `qwen2.5:1.5b`
-
-| Metric | Result |
-|---|---:|
-| Valid response format rate | 90% |
-| Evidence consistency rate | 88.89% |
-| Triage accuracy | 50% |
-
-These results are from a 10-case evaluation and should not be interpreted as a comprehensive benchmark.
-
-The evidence consistency checker currently covers explicit shell argument contradictions. It is not a general semantic verification system.
-
 ## 🔄 Continuous Integration
 
-SecureCode AI uses GitHub Actions to automatically run the pytest suite.
-
-Workflow file:
-
-```text
-.github/workflows/tests.yml
-```
-
-The workflow runs on:
-
-- Pushes to `main`.
-- Pull requests targeting `main`.
-
-The CI pipeline:
-
-1. Checks out the repository.
-2. Sets up Python 3.11.
-3. Installs project dependencies.
-4. Runs the automated test suite.
-
-This helps detect regressions before changes are integrated into the main branch.
+GitHub Actions runs the pytest suite on pushes to `main` and on pull requests targeting `main`. The workflow checks out the repository, sets up Python, installs the dependencies and runs the tests.
 
 ## ⚠️ Limitations
 
-- Bandit identifies potentially risky coding patterns; it does not prove that a vulnerability is exploitable.
-- Reachability Analysis supports a limited set of Flask route patterns, sources, sinks, and direct function calls.
-- Reachability results indicate possible code paths and do not prove exploitability.
-- Static analysis cannot fully understand application context or determine whether every input is attacker-controlled.
-- AI-generated triage and explanations are advisory and may be incorrect.
-- Evidence consistency validation covers only a limited set of explicit contradictions.
-- Suggested fixes are checked as isolated snippets, not as complete project patches.
-- Passing syntax and Bandit checks does not guarantee that a suggested fix is secure.
-- Curated remediation examples are illustrative and must be adapted and tested.
-- A clean scan does not guarantee that a project is completely secure.
-- The current implementation focuses on Python source code.
+- Static analysis finds risky code patterns. It does not prove that a vulnerability is exploitable, and a clean scan does not guarantee that code is secure.
+- JavaScript support is new: only four rules are included (`eval()`, `new Function()`, `innerHTML` assignment, `document.write()`), so many JavaScript issues are not detected.
+- JavaScript findings have no reachability analysis, and their example fixes are hand-written and not machine-validated.
+- Reachability analysis covers a limited set of Flask patterns, sources, sinks and direct function calls.
+- AI triage and explanations are advisory and can be wrong. The benchmark is small (21 findings, labeled by one person) and covers Python only.
+- Evidence-consistency validation covers only a limited set of explicit contradictions.
+- Suggested fixes are checked as isolated snippets, not as complete project patches. Curated examples are illustrative and must be adapted and tested.
+- Minified JavaScript files (`*.min.js`) and common dependency folders such as `node_modules` are skipped in ZIP uploads.
 
 ## 🔒 Security and Privacy
 
-- Uploaded Python source code is analyzed without being executed by the scanner.
-- AI explanations are generated through a locally running Ollama model.
+- Uploaded code is analyzed without being executed.
+- AI explanations are generated by a local Ollama model. No code is sent to an external AI API.
+- JavaScript scanning uses local rules, and Semgrep runs with metrics disabled.
 - ZIP archives are subject to validation and extraction limits.
-- Suggested code changes are not automatically applied.
+- Suggested code changes are never applied automatically.
 - AI assessments do not replace manual security review.
 
 ## 👩‍💻 Author
 
 **Maryam Salahli**
 
-GitHub: [M4ryzs7](https://github.com/M4ryzs7)
-
 ---
 
-*SecureCode AI — Making Python code security analysis more accessible through static analysis and local AI.*
+*SecureCode AI: making code security analysis more accessible through static analysis and local AI.*
