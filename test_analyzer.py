@@ -402,3 +402,47 @@ def test_analyzer_preserves_reachability_results():
 
     assert result["status"] == "success"
     assert result["reachability"] == reachability
+
+def test_rejects_true_positive_that_calls_code_safe():
+    from analyzer import validate_evidence_consistency
+
+    ai_data = {
+        "triage": "likely_true_positive",
+        "triage_reason": "The code uses shell=True, which can lead to injection.",
+        "explanation": (
+            "The command is built from a constant value, which is safe in this "
+            "specific case. However, shell=True poses a risk if the command changes."
+        ),
+    }
+    ok, reason = validate_evidence_consistency(
+        {"code": "subprocess.run('ls', shell=True)"}, ai_data
+    )
+
+    assert ok is False
+    assert "contradicts" in reason
+
+
+def test_not_safe_wording_is_allowed_with_true_positive():
+    from analyzer import validate_evidence_consistency
+
+    ai_data = {
+        "triage": "likely_true_positive",
+        "triage_reason": "Untrusted input reaches the shell.",
+        "explanation": "Passing untrusted input here is not safe because the shell interprets it.",
+    }
+    ok, reason = validate_evidence_consistency({"code": ""}, ai_data)
+
+    assert ok is True
+
+
+def test_safe_wording_is_allowed_for_other_triage_values():
+    from analyzer import validate_evidence_consistency
+
+    for triage in ("likely_false_positive", "uncertain"):
+        ai_data = {
+            "triage": triage,
+            "triage_reason": "The command is a constant.",
+            "explanation": "The command is constant, so this usage appears safe.",
+        }
+        ok, reason = validate_evidence_consistency({"code": ""}, ai_data)
+        assert ok is True

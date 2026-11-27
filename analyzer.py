@@ -206,6 +206,15 @@ def _extract_json_object(text: str):
             return None
     return None
 
+# Phrases where the AI itself says the code is safe. Used only to catch a
+# "likely_true_positive" verdict that contradicts its own explanation.
+_SAFE_CLAIM_PATTERNS = [
+    r"\b(is|are|appears|seems)( to be)? (generally |considered |completely |perfectly )?safe\b",
+    r"\b(is|are) not (vulnerable|exploitable)\b",
+    r"\bnot (a |an )?(real |actual )?security (risk|issue|concern|vulnerability)\b",
+    r"\bposes? no (real |actual )?(security )?(risk|threat)\b",
+]
+
 
 def validate_evidence_consistency(finding: dict, ai_data: dict):
     """
@@ -215,8 +224,9 @@ def validate_evidence_consistency(finding: dict, ai_data: dict):
     otherwise (False, reason).
     """
     code = str(finding.get("code", ""))
-    explanation = ai_data.get("explanation", "")
-    triage_reason = ai_data.get("triage_reason", "")
+    explanation = str(ai_data.get("explanation", ""))
+    triage_reason = str(ai_data.get("triage_reason", ""))
+    triage = str(ai_data.get("triage", "")).lower()
 
     ai_text = f"{triage_reason} {explanation}".lower()
 
@@ -241,6 +251,24 @@ def validate_evidence_consistency(finding: dict, ai_data: dict):
             ai_text,
         ):
             return False, "AI incorrectly claims shell=False"
+
+    # Reject a true-positive triage that explicitly describes
+    # the vulnerable code as safe.
+    safe_claim_pattern = (
+        r"\b(?:is|are|seems|appears|considered|remains)\s+"
+        r"(?:completely\s+|generally\s+|potentially\s+)?safe\b"
+        r"|\bsafe\s+(?:in|for)\s+(?:this|the|current)\b"
+    )
+    
+    if triage == "likely_true_positive":
+        if any(
+            re.search(pattern, explanation, re.IGNORECASE)
+            for pattern in _SAFE_CLAIM_PATTERNS
+        ):
+            return False, (
+                "AI explanation contradicts the true-positive triage "
+                "by describing the vulnerable code as safe"
+            )
 
     return True, None
 
