@@ -523,11 +523,6 @@ def _add_ai_explanations(findings, analyses, max_ai_findings, progress_callback,
             if aborted:
                 warnings.append(f"AI explanations stopped early: {result['error']}")
             continue
-        
-        if finding.get("test_id") == "B602":
-            print("\n--- B602 RAW AI RESPONSE ---")
-            print(result["text"])
-            print("--- END RAW RESPONSE ---\n")
 
         ai_data, reason = parse_ai_response(
             result["text"],
